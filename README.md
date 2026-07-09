@@ -1,14 +1,14 @@
 <!-- Update this title with a descriptive name. Use sentence case. -->
-# Terraform modules template project
+# Base Cluster VPC
 
 <!--
 Update status and "latest release" badges:
   1. For the status options, see https://terraform-ibm-modules.github.io/documentation/#/badge-status
-  2. Update the "latest release" badge to point to the correct module's repo. Replace "terraform-ibm-module-template" in two places.
+  2. Update the "latest release" badge to point to the correct module's repo. Replace "terraform-ibm-base-cluster-vpc" in two places.
   3. Update the Terraform Registry badge to point to the correct published module path (replace "module-template" with the actual module name before release).
 -->
 [![Incubating (Not yet consumable)](https://img.shields.io/badge/status-Incubating%20(Not%20yet%20consumable)-red)](https://terraform-ibm-modules.github.io/documentation/#/badge-status)
-[![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-module-template?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-module-template/releases/latest)
+[![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-base-cluster-vpc?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/releases/latest)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com/)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
@@ -28,16 +28,16 @@ TODO: Replace this with a description of the modules in this repo.
 <!-- BEGIN OVERVIEW HOOK -->
 ## Overview
 <ul>
-  <li><a href="#terraform-ibm-module-template">terraform-ibm-module-template</a></li>
-  <li><a href="https://github.com/terraform-ibm-modules/terraform-ibm-module-template/tree/main/examples">Examples</a>
+  <li><a href="#terraform-ibm-base-cluster-vpc">terraform-ibm-base-cluster-vpc</a></li>
+  <li><a href="https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/tree/main/examples">Examples</a>
     <ul>
       <li>
-        <a href="https://github.com/terraform-ibm-modules/terraform-ibm-module-template/tree/main/examples/advanced">Advanced example</a>
-        <a href="https://cloud.ibm.com/schematics/workspaces/create?workspace_name=module-template-advanced-example&repository=https://github.com/terraform-ibm-modules/terraform-ibm-module-template/tree/main/examples/advanced"><img src="https://img.shields.io/badge/Deploy%20with%20IBM%20Cloud%20Schematics-0f62fe?style=flat&logo=ibm&logoColor=white&labelColor=0f62fe" alt="Deploy with IBM Cloud Schematics" style="height: 16px; vertical-align: text-bottom; margin-left: 5px;"></a>
+        <a href="https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/tree/main/examples/advanced">Advanced example</a>
+        <a href="https://cloud.ibm.com/schematics/workspaces/create?workspace_name=base-cluster-vpc-advanced-example&repository=https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/tree/main/examples/advanced"><img src="https://img.shields.io/badge/Deploy%20with%20IBM%20Cloud%20Schematics-0f62fe?style=flat&logo=ibm&logoColor=white&labelColor=0f62fe" alt="Deploy with IBM Cloud Schematics" style="height: 16px; vertical-align: text-bottom; margin-left: 5px;"></a>
       </li>
       <li>
-        <a href="https://github.com/terraform-ibm-modules/terraform-ibm-module-template/tree/main/examples/basic">Basic example</a>
-        <a href="https://cloud.ibm.com/schematics/workspaces/create?workspace_name=module-template-basic-example&repository=https://github.com/terraform-ibm-modules/terraform-ibm-module-template/tree/main/examples/basic"><img src="https://img.shields.io/badge/Deploy%20with%20IBM%20Cloud%20Schematics-0f62fe?style=flat&logo=ibm&logoColor=white&labelColor=0f62fe" alt="Deploy with IBM Cloud Schematics" style="height: 16px; vertical-align: text-bottom; margin-left: 5px;"></a>
+        <a href="https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/tree/main/examples/basic">Basic example</a>
+        <a href="https://cloud.ibm.com/schematics/workspaces/create?workspace_name=base-cluster-vpc-basic-example&repository=https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/tree/main/examples/basic"><img src="https://img.shields.io/badge/Deploy%20with%20IBM%20Cloud%20Schematics-0f62fe?style=flat&logo=ibm&logoColor=white&labelColor=0f62fe" alt="Deploy with IBM Cloud Schematics" style="height: 16px; vertical-align: text-bottom; margin-left: 5px;"></a>
       </li>
     </ul>
     ℹ️ Ctrl/Cmd+Click or right-click on the Schematics deploy button to open in a new tab.
@@ -49,7 +49,7 @@ TODO: Replace this with a description of the modules in this repo.
 
 
 <!-- Replace this heading with the name of the root level module (the repo name) -->
-## terraform-ibm-module-template
+## terraform-ibm-base-cluster-vpc
 
 ### Usage
 
