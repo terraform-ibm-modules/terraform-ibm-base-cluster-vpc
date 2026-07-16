@@ -5,7 +5,7 @@
 
 # Segregate pools, as we need default pool for cluster creation
 locals {
-  is_ocp = var.cluster_type == "ocp"
+  is_ocp = var.cluster_type == "openshift"
 
   # ibm_container_vpc_cluster automatically names default pool "default" (See https://github.com/IBM-Cloud/terraform-provider-ibm/issues/2849)
   default_pool = element([for pool in var.worker_pools : pool if pool.pool_name == "default"], 0)
@@ -14,32 +14,35 @@ locals {
   default_ocp_version  = "${data.ibm_container_cluster_versions.cluster_versions.default_openshift_version}_openshift"
   default_kube_version = data.ibm_container_cluster_versions.cluster_versions.default_kube_version
 
-  ocp_version  = var.ocp_version == null || var.ocp_version == "default" ? local.default_ocp_version : "${var.ocp_version}_openshift"
-  kube_version = var.kube_version == null || var.kube_version == "default" ? local.default_kube_version : var.kube_version
-
-  cluster_version = local.is_ocp ? local.ocp_version : local.kube_version
+  cluster_version = (
+    var.cluster_type == "openshift"
+    ? (
+      var.cluster_version == null || var.cluster_version == "default"
+      ? local.default_ocp_version
+      : "${var.cluster_version}_openshift"
+    )
+    : (
+      var.cluster_version == null || var.cluster_version == "default"
+      ? local.default_kube_version
+      : var.cluster_version
+    )
+  )
 
   valid_versions_list = local.is_ocp ? data.ibm_container_cluster_versions.cluster_versions.valid_openshift_versions : data.ibm_container_cluster_versions.cluster_versions.valid_kube_versions
   valid_versions      = [for version in local.valid_versions_list : regex("^([0-9]+\\.[0-9]+)", version)[0]]
-
-  # COS (OCP only)
-  cos_name         = local.is_ocp ? (var.use_existing_cos == true || (var.use_existing_cos == false && var.cos_name != null) ? var.cos_name : "${var.cluster_name}_cos") : null
-  cos_plan         = "standard"
-  cos_instance_crn = local.is_ocp ? (var.enable_registry_storage == true ? (var.use_existing_cos != false ? var.existing_cos_id : module.cos_instance[0].cos_instance_id) : null) : null
-
   # tflint-ignore: terraform_unused_declarations
   cluster_with_upgrade_id = var.ignore_worker_pool_size_changes ? try(ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade[0].id, null) : try(ibm_container_vpc_cluster.cluster_with_upgrade[0].id, null)
   # tflint-ignore: terraform_unused_declarations
   cluster_without_upgrade_id = var.ignore_worker_pool_size_changes ? try(ibm_container_vpc_cluster.autoscaling_cluster[0].id, null) : try(ibm_container_vpc_cluster.cluster[0].id, null)
 
-  cluster_id = var.enable_version_upgrade ? local.cluster_with_upgrade_id : local.cluster_without_upgrade_id
+  cluster_id = var.enable_cluster_version_upgrade ? local.cluster_with_upgrade_id : local.cluster_without_upgrade_id
 
   # tflint-ignore: terraform_unused_declarations
   cluster_with_upgrade_crn = var.ignore_worker_pool_size_changes ? try(ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade[0].crn, null) : try(ibm_container_vpc_cluster.cluster_with_upgrade[0].crn, null)
   # tflint-ignore: terraform_unused_declarations
   cluster_without_upgrade_crn = var.ignore_worker_pool_size_changes ? try(ibm_container_vpc_cluster.autoscaling_cluster[0].crn, null) : try(ibm_container_vpc_cluster.cluster[0].crn, null)
 
-  cluster_crn = var.enable_version_upgrade ? local.cluster_with_upgrade_crn : local.cluster_without_upgrade_crn
+  cluster_crn = var.enable_cluster_version_upgrade ? local.cluster_with_upgrade_crn : local.cluster_without_upgrade_crn
 
   # security group attached to worker pool
   # the terraform provider / iks api take a security group id hardcoded to "cluster", so this pseudo-value is injected into the array based on attach_default_cluster_security_group
@@ -54,82 +57,9 @@ locals {
 
   # Cluster network plugin setting is only available for Red Hat OpenShift VPC clusters with version >= 4.20 and RHCOS operating system
   # For IKS this is always null
-  network_plugin = local.is_ocp ? (tonumber(regex("^([0-9]+\\.[0-9]+)", local.cluster_version)[0]) > 4.19 && local.default_pool.operating_system == local.os_rhcos ? var.network_plugin : null) : null
-
   binaries_path = "/tmp"
 }
 
-########################################################################################################################
-# Get OCP addon versions (OCP only)
-########################################################################################################################
-
-data "ibm_iam_auth_token" "tokendata" {
-  count = local.is_ocp ? 1 : 0
-}
-
-data "external" "ocp_addon_versions" {
-  count   = local.is_ocp ? 1 : 0
-  program = ["python3", "${path.module}/scripts/get_ocp_addon_versions.py"]
-  query = {
-    IAM_TOKEN = sensitive(data.ibm_iam_auth_token.tokendata[0].iam_access_token)
-    REGION    = var.region
-  }
-}
-
-# Local block to decode the json strings returned by the external data source
-locals {
-  ocp_all_addon_versions = local.is_ocp ? {
-    for addon, value in data.external.ocp_addon_versions[0].result :
-    addon => jsondecode(value)
-  } : {}
-}
-
-# Local block to verify validations for OCP AI Addon.
-locals {
-  # retrieve worker specs (CPU & RAM) for all worker pools
-  worker_specs = {
-    for pool in var.worker_pools :
-    pool.pool_name => {
-      cpu_count = tonumber(regex("^.*?(\\d+)x(\\d+)", pool.machine_type)[0])
-      ram_count = tonumber(regex("^.*?(\\d+)x(\\d+)", pool.machine_type)[1])
-      is_gpu    = contains(["gx2", "gx3", "gx4"], split(".", pool.machine_type)[0])
-    }
-  }
-}
-
-# Separate local block to handle OS validations (OCP only)
-locals {
-  os_rhel  = "REDHAT_8_64"
-  os_rhcos = "RHCOS"
-  os_rhel9 = "RHEL_9_64"
-
-  # Strip OCP version number; for IKS default to "0.0" to skip all OCP-specific checks
-  ocp_version_num  = local.is_ocp ? regex("^([0-9]+\\.[0-9]+)", local.cluster_version)[0] : "0.0"
-  is_valid_version = tonumber(local.ocp_version_num) >= 4.15
-
-  rhcos_allowed_ocp_version = local.default_pool.operating_system == local.os_rhcos && local.is_valid_version
-
-  worker_pool_rhcos_entry = [for worker in var.worker_pools : contains([local.os_rhel, local.os_rhel9], worker.operating_system) || (worker.operating_system == local.os_rhcos && local.is_valid_version) ? true : false]
-
-  # To verify rhcos operating system exists only for OCP versions >=4.15
-  # tflint-ignore: terraform_unused_declarations
-  cluster_rhcos_validation = !local.is_ocp || contains([local.os_rhel9, local.os_rhel], local.default_pool.operating_system) || local.rhcos_allowed_ocp_version ? true : tobool("RHCOS requires VPC clusters created from 4.15 onwards. Upgraded clusters from 4.14 cannot use RHCOS")
-
-  # tflint-ignore: terraform_unused_declarations
-  worker_pool_rhcos_validation = !local.is_ocp || alltrue(local.worker_pool_rhcos_entry) ? true : tobool("RHCOS requires VPC clusters created from 4.15 onwards. Upgraded clusters from 4.14 cannot use RHCOS")
-
-  # Validate if default worker pool's operating system is RHEL, all pools' operating system must be RHEL
-  rhel_check_for_all_standalone_pools = [for pool in var.worker_pools : contains([local.os_rhel, local.os_rhel9], pool.operating_system) if pool.pool_name != "default"]
-
-  # tflint-ignore: terraform_unused_declarations
-  valid_rhel_worker_pools = !local.is_ocp ? true : tonumber(local.ocp_version_num) < 4.18 ? local.default_pool.operating_system == local.os_rhcos || (contains([local.os_rhel, local.os_rhel9], local.default_pool.operating_system) && alltrue(local.rhel_check_for_all_standalone_pools)) ? true : tobool("Choosing RHEL for the default worker pool will limit all additional worker pools to RHEL.") : true
-
-  # Validate if RHCOS is used as operating system for the cluster then the default worker pool must be created with RHCOS
-  rhcos_check = contains([local.os_rhel, local.os_rhel9], local.default_pool.operating_system) || (local.default_pool.operating_system == local.os_rhcos && local.default_pool.operating_system == local.os_rhcos)
-
-  # tflint-ignore: terraform_unused_declarations
-  default_wp_validation = !local.is_ocp || local.rhcos_check ? true : tobool("If RHCOS is used with this cluster, the default worker pool should be created with RHCOS.")
-}
 
 resource "terraform_data" "install_required_binaries" {
   count = var.install_required_binaries && (var.verify_worker_network_readiness || (local.is_ocp && var.enable_ocp_console != null) || lookup(var.addons, "cluster-autoscaler", null) != null) ? 1 : 0
@@ -139,8 +69,7 @@ resource "terraform_data" "install_required_binaries" {
     enable_ocp_console              = local.is_ocp ? var.enable_ocp_console : null
   }
   provisioner "local-exec" {
-    # Using the script from the kube-audit module to avoid code duplication.
-    command     = "${path.module}/modules/kube-audit/scripts/install-binaries.sh ${local.binaries_path}"
+    command     = "${path.module}/scripts/install-binaries.sh ${local.binaries_path}"
     interpreter = ["/bin/bash", "-c"]
   }
 }
@@ -148,43 +77,19 @@ resource "terraform_data" "install_required_binaries" {
 # Lookup the current default kube version
 data "ibm_container_cluster_versions" "cluster_versions" {}
 
-module "cos_instance" {
-  count = local.is_ocp && var.enable_registry_storage && !var.use_existing_cos ? 1 : 0
-
-  source                 = "terraform-ibm-modules/cos/ibm"
-  version                = "10.16.5"
-  cos_instance_name      = local.cos_name
-  resource_group_id      = var.resource_group_id
-  cos_plan               = local.cos_plan
-  kms_encryption_enabled = false
-  create_cos_bucket      = false
-}
-
-moved {
-  from = ibm_resource_instance.cos_instance[0]
-  to   = module.cos_instance[0].ibm_resource_instance.cos_instance[0]
-}
-
-resource "ibm_resource_tag" "cos_access_tag" {
-  count       = local.is_ocp && var.enable_registry_storage && !var.use_existing_cos && length(var.access_tags) > 0 ? 1 : 0
-  resource_id = module.cos_instance[0].cos_instance_id
-  tags        = var.access_tags
-  tag_type    = "access"
-}
-
 ##############################################################################
 # Create Cluster
 ##############################################################################
 
 resource "ibm_container_vpc_cluster" "cluster" {
-  count                               = var.enable_version_upgrade ? 0 : (var.ignore_worker_pool_size_changes ? 0 : 1)
+  count                               = var.enable_cluster_version_upgrade ? 0 : (var.ignore_worker_pool_size_changes ? 0 : 1)
   name                                = var.cluster_name
   vpc_id                              = var.vpc_id
   tags                                = var.tags
   kube_version                        = local.cluster_version
   flavor                              = local.default_pool.machine_type
   entitlement                         = local.is_ocp ? var.ocp_entitlement : null
-  cos_instance_crn                    = local.cos_instance_crn
+  cos_instance_crn                    = local.is_ocp ? var.cos_instance_crn : null
   worker_count                        = local.default_pool.workers_per_zone
   resource_group_id                   = var.resource_group_id
   wait_till                           = var.cluster_ready_when
@@ -196,7 +101,7 @@ resource "ibm_container_vpc_cluster" "cluster" {
   disable_public_service_endpoint     = var.disable_public_endpoint
   worker_labels                       = local.is_ocp ? local.default_pool.labels : null
   image_security_enforcement          = local.is_ocp ? var.image_security_enforcement : null
-  network_plugin                      = local.network_plugin
+  network_plugin                      = local.is_ocp ? var.network_plugin : null
   disable_outbound_traffic_protection = var.disable_outbound_traffic_protection
   crk                                 = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.crk) : null
   kms_instance_id                     = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.kms_instance_id) : null
@@ -245,16 +150,16 @@ resource "ibm_container_vpc_cluster" "cluster" {
   }
 }
 
-# copy of the cluster resource above which allows major kubernetes version upgrade
+# copy of the cluster resource above which allows major cluster version upgrade
 resource "ibm_container_vpc_cluster" "cluster_with_upgrade" {
-  count                               = var.enable_version_upgrade ? (var.ignore_worker_pool_size_changes ? 0 : 1) : 0
+  count                               = var.enable_cluster_version_upgrade ? (var.ignore_worker_pool_size_changes ? 0 : 1) : 0
   name                                = var.cluster_name
   vpc_id                              = var.vpc_id
   tags                                = var.tags
   kube_version                        = local.cluster_version
   flavor                              = local.default_pool.machine_type
   entitlement                         = local.is_ocp ? var.ocp_entitlement : null
-  cos_instance_crn                    = local.cos_instance_crn
+  cos_instance_crn                    = local.is_ocp ? var.cos_instance_crn : null
   worker_count                        = local.default_pool.workers_per_zone
   resource_group_id                   = var.resource_group_id
   wait_till                           = var.cluster_ready_when
@@ -266,7 +171,7 @@ resource "ibm_container_vpc_cluster" "cluster_with_upgrade" {
   disable_public_service_endpoint     = var.disable_public_endpoint
   worker_labels                       = local.is_ocp ? local.default_pool.labels : null
   image_security_enforcement          = local.is_ocp ? var.image_security_enforcement : null
-  network_plugin                      = local.network_plugin
+  network_plugin                      = local.is_ocp ? var.network_plugin : null
   disable_outbound_traffic_protection = var.disable_outbound_traffic_protection
   crk                                 = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.crk) : null
   kms_instance_id                     = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.kms_instance_id) : null
@@ -315,14 +220,14 @@ resource "ibm_container_vpc_cluster" "cluster_with_upgrade" {
 
 # copy of the cluster resource above which ignores changes to the worker pool for use in autoscaling scenarios
 resource "ibm_container_vpc_cluster" "autoscaling_cluster" {
-  count                               = var.enable_version_upgrade ? 0 : (var.ignore_worker_pool_size_changes ? 1 : 0)
+  count                               = var.enable_cluster_version_upgrade ? 0 : (var.ignore_worker_pool_size_changes ? 1 : 0)
   name                                = var.cluster_name
   vpc_id                              = var.vpc_id
   tags                                = var.tags
   kube_version                        = local.cluster_version
   flavor                              = local.default_pool.machine_type
   entitlement                         = local.is_ocp ? var.ocp_entitlement : null
-  cos_instance_crn                    = local.cos_instance_crn
+  cos_instance_crn                    = local.is_ocp ? var.cos_instance_crn : null
   worker_count                        = local.default_pool.workers_per_zone
   resource_group_id                   = var.resource_group_id
   wait_till                           = var.cluster_ready_when
@@ -334,7 +239,7 @@ resource "ibm_container_vpc_cluster" "autoscaling_cluster" {
   disable_public_service_endpoint     = var.disable_public_endpoint
   worker_labels                       = local.is_ocp ? local.default_pool.labels : null
   image_security_enforcement          = local.is_ocp ? var.image_security_enforcement : null
-  network_plugin                      = local.network_plugin
+  network_plugin                      = local.is_ocp ? var.network_plugin : null
   disable_outbound_traffic_protection = var.disable_outbound_traffic_protection
   crk                                 = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.crk) : null
   kms_instance_id                     = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.kms_instance_id) : null
@@ -385,14 +290,14 @@ resource "ibm_container_vpc_cluster" "autoscaling_cluster" {
 
 # copy of the cluster resource above which allows major kubernetes version upgrade and ignores worker pool size changes
 resource "ibm_container_vpc_cluster" "autoscaling_cluster_with_upgrade" {
-  count                               = var.enable_version_upgrade ? (var.ignore_worker_pool_size_changes ? 1 : 0) : 0
+  count                               = var.enable_cluster_version_upgrade ? (var.ignore_worker_pool_size_changes ? 1 : 0) : 0
   name                                = var.cluster_name
   vpc_id                              = var.vpc_id
   tags                                = var.tags
   kube_version                        = local.cluster_version
   flavor                              = local.default_pool.machine_type
   entitlement                         = local.is_ocp ? var.ocp_entitlement : null
-  cos_instance_crn                    = local.cos_instance_crn
+  cos_instance_crn                    = local.is_ocp ? var.cos_instance_crn : null
   worker_count                        = local.default_pool.workers_per_zone
   resource_group_id                   = var.resource_group_id
   wait_till                           = var.cluster_ready_when
@@ -404,7 +309,7 @@ resource "ibm_container_vpc_cluster" "autoscaling_cluster_with_upgrade" {
   disable_public_service_endpoint     = var.disable_public_endpoint
   worker_labels                       = local.is_ocp ? local.default_pool.labels : null
   image_security_enforcement          = local.is_ocp ? var.image_security_enforcement : null
-  network_plugin                      = local.network_plugin
+  network_plugin                      = local.is_ocp ? var.network_plugin : null
   disable_outbound_traffic_protection = var.disable_outbound_traffic_protection
   crk                                 = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.crk) : null
   kms_instance_id                     = local.is_ocp ? (local.default_pool.boot_volume_encryption_kms_config == null ? null : local.default_pool.boot_volume_encryption_kms_config.kms_instance_id) : null
@@ -511,7 +416,7 @@ module "worker_pools" {
 # microservice is handling requests, there might be a delay.
 ##############################################################################
 
-resource "null_resource" "confirm_network_healthy" {
+resource "terraform_data" "confirm_network_healthy" {
   count = var.verify_worker_network_readiness ? 1 : 0
 
   # Worker pool creation can start before the 'ibm_container_vpc_cluster' completes since there is no explicit
@@ -526,10 +431,6 @@ resource "null_resource" "confirm_network_healthy" {
     module.worker_pools
   ]
 
-  triggers = {
-    verify_worker_network_readiness = var.verify_worker_network_readiness
-  }
-
   provisioner "local-exec" {
     command     = "${path.module}/scripts/confirm_network_healthy.sh ${var.network_plugin} ${local.binaries_path}"
     interpreter = ["/bin/bash", "-c"]
@@ -540,38 +441,11 @@ resource "null_resource" "confirm_network_healthy" {
 }
 
 ##############################################################################
-# Enable or Disable OCP Console Patch (OCP only)
-##############################################################################
-
-resource "null_resource" "ocp_console_management" {
-  count      = local.is_ocp && var.enable_ocp_console != null ? 1 : 0
-  depends_on = [terraform_data.install_required_binaries, null_resource.confirm_network_healthy]
-  triggers = {
-    enable_ocp_console = var.enable_ocp_console
-  }
-  provisioner "local-exec" {
-    command     = "${path.module}/scripts/enable_disable_ocp_console.sh ${local.binaries_path}"
-    interpreter = ["/bin/bash", "-c"]
-    environment = {
-      KUBECONFIG         = data.ibm_container_cluster_config.cluster_config[0].config_file_path
-      ENABLE_OCP_CONSOLE = var.enable_ocp_console
-    }
-  }
-}
-
-##############################################################################
 # Addons
 ##############################################################################
 
 locals {
   addons = { for addon_name, addon_version in(var.addons != null ? var.addons : {}) : addon_name => addon_version if addon_version != null }
-}
-
-removed {
-  from = ibm_container_addons.addons
-  lifecycle {
-    destroy = false
-  }
 }
 
 resource "ibm_container_addons" "ocp_addons" {
@@ -585,7 +459,7 @@ resource "ibm_container_addons" "ocp_addons" {
     ibm_container_vpc_cluster.autoscaling_cluster,
     ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade,
     module.worker_pools,
-    null_resource.confirm_network_healthy
+    terraform_data.confirm_network_healthy
   ]
 
   cluster           = local.cluster_id
@@ -620,13 +494,9 @@ locals {
   ]
 }
 
-resource "null_resource" "config_map_status" {
+resource "terraform_data" "config_map_status" {
   count      = lookup(var.addons, "cluster-autoscaler", null) != null ? 1 : 0
   depends_on = [terraform_data.install_required_binaries, ibm_container_addons.ocp_addons]
-
-  triggers = {
-    cluster_autoscaler = lookup(var.addons, "cluster-autoscaler", null) != null
-  }
 
   provisioner "local-exec" {
     command     = "${path.module}/scripts/get_config_map_status.sh ${local.binaries_path}"
@@ -639,7 +509,7 @@ resource "null_resource" "config_map_status" {
 
 resource "kubernetes_config_map_v1_data" "set_autoscaling" {
   count      = lookup(var.addons, "cluster-autoscaler", null) != null ? 1 : 0
-  depends_on = [null_resource.config_map_status]
+  depends_on = [terraform_data.config_map_status]
 
   metadata {
     name      = "iks-ca-configmap"
@@ -675,7 +545,7 @@ data "ibm_is_lbs" "all_lbs" {
     ibm_container_vpc_cluster.autoscaling_cluster,
     ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade,
     module.worker_pools,
-    null_resource.confirm_network_healthy
+    terraform_data.confirm_network_healthy
   ]
   count = length(var.additional_lb_security_group_ids) > 0 ? 1 : 0
 }
@@ -714,7 +584,7 @@ data "ibm_is_virtual_endpoint_gateway" "master_vpe" {
     ibm_container_vpc_cluster.autoscaling_cluster,
     ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade,
     module.worker_pools,
-    null_resource.confirm_network_healthy
+    terraform_data.confirm_network_healthy
   ]
   name = local.vpes_to_attach_to_sg["master"]
 }
@@ -727,7 +597,7 @@ data "ibm_is_virtual_endpoint_gateway" "api_vpe" {
     ibm_container_vpc_cluster.autoscaling_cluster,
     ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade,
     module.worker_pools,
-    null_resource.confirm_network_healthy
+    terraform_data.confirm_network_healthy
   ]
   name = local.vpes_to_attach_to_sg["api"]
 }
@@ -740,7 +610,7 @@ data "ibm_is_virtual_endpoint_gateway" "registry_vpe" {
     ibm_container_vpc_cluster.autoscaling_cluster,
     ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade,
     module.worker_pools,
-    null_resource.confirm_network_healthy
+    terraform_data.confirm_network_healthy
   ]
   name = local.vpes_to_attach_to_sg["registry"]
 }

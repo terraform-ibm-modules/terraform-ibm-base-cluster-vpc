@@ -27,9 +27,14 @@ variable "cluster_name" {
 
 variable "cluster_type" {
   type        = string
-  description = "The name that is assigned to the provisioned cluster."
-}
+  description = "The type of cluster to provision."
+  default     = "kubernetes"
 
+  validation {
+    condition     = contains(["kubernetes", "openshift"], var.cluster_type)
+    error_message = "cluster_type must be either 'kubernetes' or 'openshift'."
+  }
+}
 variable "vpc_subnets" {
   type = map(list(object({
     id         = string
@@ -93,29 +98,6 @@ variable "worker_pools" {
   validation {
     condition     = length([for worker_pool in var.worker_pools : worker_pool if(worker_pool.subnet_prefix == null && worker_pool.vpc_subnets == null) || (worker_pool.subnet_prefix != null && worker_pool.vpc_subnets != null)]) == 0
     error_message = "Please provide exactly one of subnet_prefix or vpc_subnets. Passing neither or both is invalid."
-  }
-  validation {
-    condition = alltrue([
-      for worker_pool in var.worker_pools :
-      anytrue([
-        worker_pool.operating_system == local.os_rhel9,
-        worker_pool.operating_system == local.os_rhel,
-        worker_pool.operating_system == local.os_rhcos
-      ])
-    ])
-    error_message = "RHEL 9 (RHEL_9_64), RHEL 8 (REDHAT_8_64) or Red Hat Enterprise Linux CoreOS (RHCOS) are the allowed OS values. RHCOS requires VPC clusters created from 4.15 onwards. Upgraded clusters from 4.14 cannot use RHCOS."
-  }
-
-  validation {
-    condition = (contains(local.valid_ocp_versions, local.ocp_version_num)) && alltrue([
-      for wp in var.worker_pools :
-      (local.ocp_version_num == "4.14" && wp.operating_system == local.os_rhel) ||
-      (local.ocp_version_num == "4.15" && contains([local.os_rhel, local.os_rhcos], wp.operating_system)) ||
-      (contains(["4.16", "4.17"], local.ocp_version_num) && contains([local.os_rhel9, local.os_rhel, local.os_rhcos], wp.operating_system)) ||
-      (contains(["4.18", "4.19", "4.20"], local.ocp_version_num) && contains([local.os_rhel9, local.os_rhcos], wp.operating_system)) ||
-      (tonumber(local.ocp_version_num) >= 4.21 && wp.operating_system == local.os_rhcos)
-    ])
-    error_message = "Invalid operating system for the given OCP version. Ensure the OS is compatible with the OCP version. Supported compatible OCP version and OS are v4.14: (REDHAT_8_64); v4.15: (REDHAT_8_64, RHCOS) ; v4.16 and v4.17: (REDHAT_8_64, RHCOS, RHEL_9_64); v4.18: (RHCOS, RHEL_9_64); v4.19: (RHEL_9_64, RHCOS)"
   }
 
   validation {
@@ -203,6 +185,17 @@ variable "cluster_autoscaler_config" {
   })
 
   default = {}
+  validation {
+    condition = (
+      var.cluster_type == "openshift" ||
+      length(compact([
+        for v in values(var.cluster_autoscaler_config) :
+        v == null ? "" : "set"
+      ])) == 0
+    )
+
+    error_message = "cluster_autoscaler_config is only supported when cluster_type is 'ocp'."
+  }
 }
 
 variable "worker_pools_taints" {
@@ -265,43 +258,36 @@ variable "ignore_worker_pool_size_changes" {
   default     = false
 }
 
-variable "ocp_version" {
+variable "cluster_version" {
   type        = string
-  description = "The version of the OpenShift cluster that should be provisioned (format 4.x). If no value is specified, the current default version is used. You can also specify `default`. This input is used only during initial cluster provisioning and is ignored for updates. To prevent possible destructive changes, update the cluster version outside of Terraform."
-  default     = null
+  description = <<EOT
+  The version of the cluster to provision.
+
+  For Kubernetes clusters, specify a Kubernetes version (for example, 1.33).
+  For OpenShift clusters, specify an OpenShift version (for example, 4.19).
+
+  If no value is specified, or if set to "default", the current default version
+  for the selected cluster type is used.
+
+  This input is used only during initial cluster provisioning and is ignored for updates.
+  EOT
+
+  default = null
+
   validation {
     condition = (
-      var.ocp_version == null
-      || var.ocp_version == "default"
-      || try(contains(local.valid_ocp_versions, var.ocp_version), false)
+      var.cluster_version == null ||
+      var.cluster_version == "default" ||
+      try(contains(local.valid_versions, var.cluster_version), false)
     )
-    error_message = "Invalid ocp_version provided. Supported versions are: ${join(", ", local.valid_ocp_versions)}"
+
+    error_message = "Invalid cluster_version provided. Supported versions are: ${join(", ", local.valid_versions)}"
   }
 }
 
-variable "enable_openshift_version_upgrade" {
+variable "enable_cluster_version_upgrade" {
   type        = bool
-  description = "When set to true, allows Terraform to manage major OpenShift version upgrades. This is intended for advanced users who manually control major version upgrades. Defaults to false to avoid unintended drift from IBM-managed patch updates. NOTE: Enabling this on existing clusters requires a one-time terraform state migration. See [README](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc/blob/main/README.md#openshift-version-upgrade) for details."
-  default     = false
-}
-# Kubernetes version (IKS)
-variable "kube_version" {
-  type        = string
-  description = "The version of Kubernetes cluster that should be provisioned (format 1.x). If no value is specified, the current default version is used. You can also specify `default`. This input is used only during initial cluster provisioning and is ignored for updates."
-  default     = null
-  validation {
-    condition = (
-      var.kube_version == null
-      || var.kube_version == "default"
-      || try(contains(local.valid_kube_versions, var.kube_version), false)
-    )
-    error_message = "Invalid kube_version provided. Supported versions are: ${join(", ", local.valid_kube_versions)}"
-  }
-}
-
-variable "enable_version_upgrade" {
-  type        = bool
-  description = "When set to true, allows Terraform to manage major Kubernetes version upgrades. This is intended for advanced users who manually control major version upgrades. Defaults to false to avoid unintended drift from IBM-managed patch updates. NOTE: Enabling this on existing clusters requires a one-time terraform state migration."
+  description = "When set to true, allows Terraform to manage major cluster version upgrades. This is intended for advanced users who manually control major version upgrades. Defaults to false to avoid unintended drift from IBM-managed patch updates. NOTE: Enabling this on existing clusters requires a one-time terraform state migration."
   default     = false
 }
 
@@ -325,6 +311,14 @@ variable "ocp_entitlement" {
   type        = string
   description = "Value that is applied to the entitlements for OCP cluster provisioning"
   default     = null
+  validation {
+    condition = (
+      var.cluster_type == "openshift" ||
+      var.ocp_entitlement == null
+    )
+
+    error_message = "ocp_entitlement is only supported when cluster_type is 'openshift'."
+  }
 }
 
 variable "force_delete_storage" {
@@ -333,33 +327,19 @@ variable "force_delete_storage" {
   default     = false
 }
 
-variable "cos_name" {
+variable "cos_instance_crn" {
   type        = string
-  description = "Name of the COS instance to provision for OpenShift internal registry storage. New instance only provisioned if 'enable_registry_storage' is true and 'use_existing_cos' is false. Default: '<cluster_name>_cos'"
-  default     = null
-}
-
-variable "use_existing_cos" {
-  type        = bool
-  description = "Flag indicating whether or not to use an existing COS instance for OpenShift internal registry storage. Only applicable if 'enable_registry_storage' is true"
-  default     = false
-}
-
-variable "existing_cos_id" {
-  type        = string
-  description = "The COS id of an already existing COS instance to use for OpenShift internal registry storage. Only required if 'enable_registry_storage' and 'use_existing_cos' are true."
+  description = "crn of the COS instance to provision for OpenShift internal registry storage."
   default     = null
 
   validation {
-    condition     = !(var.enable_registry_storage && var.use_existing_cos && var.existing_cos_id == null)
-    error_message = "A value for 'existing_cos_id' must be provided when 'enable_registry_storage' and 'use_existing_cos' are both set to true."
-  }
-}
+    condition = (
+      var.cluster_type == "openshift" ||
+      var.cos_instance_crn == null
+    )
 
-variable "enable_registry_storage" {
-  type        = bool
-  description = "Set to `true` to enable IBM Cloud Object Storage for the Red Hat OpenShift internal image registry. Set to `false` only for new cluster deployments in an account that is allowlisted for this feature."
-  default     = true
+    error_message = "cos_instance_crn is only supported when cluster_type is 'openshift'."
+  }
 }
 
 variable "kms_config" {
@@ -389,7 +369,7 @@ variable "access_tags" {
 
 variable "disable_outbound_traffic_protection" {
   type        = bool
-  description = "Whether to allow public outbound access from the cluster workers. This is only applicable for OCP 4.15 and later."
+  description = "Whether to allow public outbound access from the cluster workers. This is applicable for OCP 4.15 and later. For iks set per your environment's security requirements."
   default     = false
 }
 
@@ -419,18 +399,7 @@ variable "verify_worker_network_readiness" {
 
 variable "addons" {
   type = object({
-    debug-tool = optional(object({
-      version         = optional(string)
-      parameters_json = optional(string)
-    }))
-    image-key-synchronizer = optional(object({
-      version         = optional(string)
-      parameters_json = optional(string)
-    }))
-    openshift-data-foundation = optional(object({
-      version         = optional(string)
-      parameters_json = optional(string)
-    }))
+    # Common
     vpc-file-csi-driver = optional(object({
       version         = optional(string)
       parameters_json = optional(string)
@@ -451,83 +420,65 @@ variable "addons" {
       version         = optional(string)
       parameters_json = optional(string)
     }))
+
+    # OCP only
+    debug-tool = optional(object({
+      version         = optional(string)
+      parameters_json = optional(string)
+    }))
+    image-key-synchronizer = optional(object({
+      version         = optional(string)
+      parameters_json = optional(string)
+    }))
+    openshift-data-foundation = optional(object({
+      version         = optional(string)
+      parameters_json = optional(string)
+    }))
     openshift-ai = optional(object({
       version         = optional(string)
       parameters_json = optional(string)
     }))
+
+    # iks only
+    diagnostics-and-debug-tool = optional(object({
+      version         = optional(string)
+      parameters_json = optional(string)
+    }))
+    alb-oauth-proxy = optional(object({
+      version         = optional(string)
+      parameters_json = optional(string)
+    }))
   })
-  description = "Map of OCP cluster add-on versions to install (NOTE: The 'vpc-block-csi-driver' add-on is installed by default for VPC clusters and 'ibm-storage-operator' is installed by default in OCP 4.15 and later, however you can explicitly specify it here if you wish to choose a later version than the default one). For full list of all supported add-ons and versions, see https://cloud.ibm.com/docs/containers?topic=containers-supported-cluster-addon-versions"
-  nullable    = false
-  default     = {}
 
-  ########################################################################################################################
-  # OCP addons version validation
-  ########################################################################################################################
+  description = "Map of cluster add-on versions to install."
+
+  nullable = false
+  default  = {}
 
   validation {
-    condition = alltrue([
-      for addon_name, addon_cfg in var.addons : (
-        try(addon_cfg.version, null) == null ? true :
-        contains(keys(local.ocp_all_addon_versions), addon_name) &&
-        contains(keys(local.ocp_all_addon_versions[addon_name]), tostring(addon_cfg.version)) &&
-        (tonumber(split(".", local.ocp_version_num)[0]) * 100 + tonumber(split(".", local.ocp_version_num)[1])) >=
-        (
-          (
-            tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[0]))[0]) * 100 +
-            tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[0]))[1])
-          )
-        ) &&
-        (
-          (tonumber(split(".", local.ocp_version_num)[0]) * 100 + tonumber(split(".", local.ocp_version_num)[1])) <
-          (
-            (
-              tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[1]))[0]) * 100 +
-              tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[1]))[1])
-            )
-          )
-        )
+    condition = (
+      var.cluster_type == "openshift" ||
+      (
+        lookup(var.addons, "debug-tool", null) == null &&
+        lookup(var.addons, "image-key-synchronizer", null) == null &&
+        lookup(var.addons, "openshift-data-foundation", null) == null &&
+        lookup(var.addons, "openshift-ai", null) == null
       )
-    ])
+    )
 
-    error_message = join("\n", flatten([
-      "Addon validation failed:",
-      [
-        for addon_name, addon_cfg in var.addons : (
-          try(addon_cfg.version, null) == null ? [] :
-          !contains(keys(local.ocp_all_addon_versions), addon_name) ?
-          ["- Addon '${addon_name}' is not recognized."] :
-          !contains(keys(local.ocp_all_addon_versions[addon_name]), tostring(addon_cfg.version)) ?
-          ["- Addon '${addon_name}' version '${addon_cfg.version}' is not supported."] :
-
-          (
-            (tonumber(split(".", local.ocp_version_num)[0]) * 100 + tonumber(split(".", local.ocp_version_num)[1])) <
-            (
-              tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[0]))[0]) * 100 +
-              tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[0]))[1])
-            ) ||
-            (
-              (tonumber(split(".", local.ocp_version_num)[0]) * 100 + tonumber(split(".", local.ocp_version_num)[1])) >=
-              (
-                tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[1]))[0]) * 100 +
-                tonumber(split(".", regex("\\d+\\.\\d+", split(" ", lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range)[1]))[1])
-              )
-            )
-          ) ?
-          ["- Addon '${addon_name}' version '${addon_cfg.version}' requires OCP version '${lookup(local.ocp_all_addon_versions[addon_name], tostring(addon_cfg.version), { "supported_openshift_range" = "0.0 0.0" }).supported_openshift_range}'"] :
-          []
-        )
-      ]
-    ]))
+    error_message = "debug-tool, image-key-synchronizer, openshift-data-foundation, and openshift-ai are supported only for OpenShift clusters."
   }
 
   validation {
-    condition     = (lookup(var.addons, "openshift-ai", null) != null ? lookup(var.addons["openshift-ai"], "version", null) == null : true) || alltrue([for spec in values(local.worker_specs) : spec.cpu_count >= 8 && spec.ram_count >= 32])
-    error_message = "To install OCP AI add-on, all worker nodes in all pools must have at least 8-core CPU and 32GB memory."
-  }
+    condition = (
+      var.cluster_type != "openshift" ||
+      (
+        lookup(var.addons, "diagnostics-and-debug-tool", null) == null &&
+        lookup(var.addons, "alb-oauth-proxy", null) == null
+      )
+    )
 
-  validation {
-    condition     = (lookup(var.addons, "openshift-ai", null) != null ? lookup(var.addons["openshift-ai"], "version", null) == null : true) || anytrue([for pool in var.worker_pools : lookup(local.worker_specs[pool.pool_name], "is_gpu", false)])
-    error_message = "OCP AI add-on requires at least one GPU-enabled worker pool."
+    error_message = "diagnostics-and-debug-tool and alb-oauth-proxy are supported only for Kubernetes clusters."
   }
 
 }
@@ -555,6 +506,15 @@ variable "enable_ocp_console" {
   type        = bool
   default     = null
   nullable    = true
+
+  validation {
+    condition = (
+      var.cluster_type == "openshift" ||
+      var.enable_ocp_console == null
+    )
+
+    error_message = "enable_ocp_console is only supported when cluster_type is 'openshift'."
+  }
 }
 
 variable "network_plugin" {
@@ -566,6 +526,15 @@ variable "network_plugin" {
     error_message = "Invalid network plugin type! Valid values are 'Calico', 'OVNKubernetes'."
     condition     = contains(["Calico", "OVNKubernetes"], var.network_plugin)
   }
+
+  validation {
+    condition = (
+      var.cluster_type == "openshift" ||
+      var.network_plugin == "Calico"
+    )
+
+    error_message = "network_plugin is only supported when cluster_type is 'ocp'."
+  }
 }
 
 variable "image_security_enforcement" {
@@ -573,6 +542,15 @@ variable "image_security_enforcement" {
   type        = bool
   default     = false
   nullable    = false
+
+  validation {
+    condition = (
+      var.cluster_type == "openshift" ||
+      var.image_security_enforcement == false
+    )
+
+    error_message = "image_security_enforcement is only supported when cluster_type is 'openshift'."
+  }
 }
 
 ##############################################################################
