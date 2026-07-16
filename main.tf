@@ -448,7 +448,7 @@ locals {
   addons = { for addon_name, addon_version in(var.addons != null ? var.addons : {}) : addon_name => addon_version if addon_version != null }
 }
 
-resource "ibm_container_addons" "ocp_addons" {
+resource "ibm_container_addons" "addons" {
   count = length(local.addons) > 0 ? 1 : 0
   # Worker pool creation can start before the 'ibm_container_vpc_cluster' completes since there is no explicit
   # depends_on in 'ibm_container_vpc_worker_pool', just an implicit depends_on on the cluster ID. Cluster ID can exist before
@@ -496,7 +496,7 @@ locals {
 
 resource "terraform_data" "config_map_status" {
   count      = lookup(var.addons, "cluster-autoscaler", null) != null ? 1 : 0
-  depends_on = [terraform_data.install_required_binaries, ibm_container_addons.ocp_addons]
+  depends_on = [terraform_data.install_required_binaries, ibm_container_addons.addons]
 
   provisioner "local-exec" {
     command     = "${path.module}/scripts/get_config_map_status.sh ${local.binaries_path}"

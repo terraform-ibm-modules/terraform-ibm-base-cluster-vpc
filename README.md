@@ -146,7 +146,7 @@ statement instead the previous block.
 
 | Name | Type |
 |------|------|
-| [ibm_container_addons.ocp_addons](https://registry.terraform.io/providers/ibm-cloud/ibm/latest/docs/resources/container_addons) | resource |
+| [ibm_container_addons.addons](https://registry.terraform.io/providers/ibm-cloud/ibm/latest/docs/resources/container_addons) | resource |
 | [ibm_container_ingress_instance.instance](https://registry.terraform.io/providers/ibm-cloud/ibm/latest/docs/resources/container_ingress_instance) | resource |
 | [ibm_container_vpc_cluster.autoscaling_cluster](https://registry.terraform.io/providers/ibm-cloud/ibm/latest/docs/resources/container_vpc_cluster) | resource |
 | [ibm_container_vpc_cluster.autoscaling_cluster_with_upgrade](https://registry.terraform.io/providers/ibm-cloud/ibm/latest/docs/resources/container_vpc_cluster) | resource |
