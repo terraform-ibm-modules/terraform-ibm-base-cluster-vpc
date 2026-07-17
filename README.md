@@ -228,6 +228,7 @@ statement instead the previous block.
 | <a name="output_cos_crn"></a> [cos\_crn](#output\_cos\_crn) | CRN of the COS instance |
 | <a name="output_ingress_hostname"></a> [ingress\_hostname](#output\_ingress\_hostname) | The hostname that was assigned to your Ingress subdomain. |
 | <a name="output_kms_config"></a> [kms\_config](#output\_kms\_config) | KMS configuration details |
+| <a name="output_kubeconfig_path"></a> [kubeconfig\_path](#output\_kubeconfig\_path) | Path to the administrator kubeconfig file generated for the cluster. |
 | <a name="output_master_status"></a> [master\_status](#output\_master\_status) | The status of the Kubernetes master. |
 | <a name="output_master_url"></a> [master\_url](#output\_master\_url) | The URL of the Kubernetes master. |
 | <a name="output_master_vpe"></a> [master\_vpe](#output\_master\_vpe) | Info about the master, or default, VPE. For more info about schema, see https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/data-sources/is_virtual_endpoint_gateway |

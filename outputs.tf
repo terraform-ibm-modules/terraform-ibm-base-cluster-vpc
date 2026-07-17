@@ -109,3 +109,8 @@ output "secrets_manager_integration_config" {
   description = "Information about the Secrets Manager instance that is used to store the Ingress certificates."
   value       = var.enable_secrets_manager_integration ? ibm_container_ingress_instance.instance[0] : null
 }
+output "kubeconfig_path" {
+  description = "Path to the administrator kubeconfig file generated for the cluster."
+  value       = try(data.ibm_container_cluster_config.cluster_config[0].config_file_path, null)
+  sensitive   = true
+}
