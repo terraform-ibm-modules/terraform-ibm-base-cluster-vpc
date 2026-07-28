@@ -1,6 +1,6 @@
 # Worker pool module
 
-This module defines and manages worker pools for an IBM Cloud Openshift VPC cluster using the `ibm_container_vpc_worker_pool` resource. It provisions and configures standalone and autoscaling worker pools, handling both pools with optional taints, labels, and encryption configurations.
+This module defines and manages worker pools for an IBM Cloud VPC cluster using the `ibm_container_vpc_worker_pool` resource. It provisions and configures standalone and autoscaling worker pools, handling both pools with optional taints, labels, and encryption configurations.
 
 ## Usage
 
@@ -70,7 +70,7 @@ module "worker_pools" {
             pool_name        = "default"
             machine_type     = "bx2.4x16"
             workers_per_zone = 2
-            operating_system = "RHCOS"
+            operating_system = "RHCOS" # Use RHCOS for OpenShift or UBUNTU_20_64 for Kubernetes
         }
     ]
     ignore_worker_pool_size_changes       = false
@@ -109,10 +109,10 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_allow_default_worker_pool_replacement"></a> [allow\_default\_worker\_pool\_replacement](#input\_allow\_default\_worker\_pool\_replacement) | (Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool follow these [steps](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc?tab=readme-ov-file#important-considerations-for-terraform-and-default-worker-pool). | `bool` | `false` | no |
+| <a name="input_allow_default_worker_pool_replacement"></a> [allow\_default\_worker\_pool\_replacement](#input\_allow\_default\_worker\_pool\_replacement) | (Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool, refer to the module documentation for important considerations. | `bool` | `false` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | ID of the existing cluster. | `string` | n/a | yes |
 | <a name="input_ignore_worker_pool_size_changes"></a> [ignore\_worker\_pool\_size\_changes](#input\_ignore\_worker\_pool\_size\_changes) | Enable if using worker autoscaling. Stops Terraform managing worker count | `bool` | `false` | no |
-| <a name="input_ocp_entitlement"></a> [ocp\_entitlement](#input\_ocp\_entitlement) | Value that is applied to the entitlements for OCP cluster provisioning | `string` | `null` | no |
+| <a name="input_ocp_entitlement"></a> [ocp\_entitlement](#input\_ocp\_entitlement) | Value that is applied to the entitlements for OpenShift cluster provisioning | `string` | `null` | no |
 | <a name="input_resource_group_id"></a> [resource\_group\_id](#input\_resource\_group\_id) | The ID of an existing IBM Cloud resource group where the cluster is grouped. | `string` | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC instance where this cluster is provisioned. | `string` | n/a | yes |
 | <a name="input_vpc_subnets"></a> [vpc\_subnets](#input\_vpc\_subnets) | Metadata that describes the VPC's subnets. Obtain this information from the VPC where this cluster is created. | <pre>map(list(object({<br/>    id         = string<br/>    zone       = string<br/>    cidr_block = string<br/>  })))</pre> | n/a | yes |

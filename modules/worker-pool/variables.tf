@@ -41,7 +41,7 @@ variable "worker_pools_taints" {
 
 variable "ocp_entitlement" {
   type        = string
-  description = "Value that is applied to the entitlements for OCP cluster provisioning"
+  description = "Value that is applied to the entitlements for OpenShift cluster provisioning"
   default     = null
 }
 
@@ -56,7 +56,7 @@ variable "vpc_subnets" {
 
 variable "allow_default_worker_pool_replacement" {
   type        = bool
-  description = "(Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool follow these [steps](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc?tab=readme-ov-file#important-considerations-for-terraform-and-default-worker-pool)."
+  description = "(Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool, refer to the module documentation for important considerations."
   default     = false
   nullable    = false
 }

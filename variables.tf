@@ -46,7 +46,7 @@ variable "vpc_subnets" {
 
 variable "allow_default_worker_pool_replacement" {
   type        = bool
-  description = "(Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool follow these [steps](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc?tab=readme-ov-file#important-considerations-for-terraform-and-default-worker-pool)."
+  description = "(Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool, refer to the module documentation for important considerations."
   default     = false
   nullable    = false
 }
@@ -111,7 +111,7 @@ variable "worker_pools" {
 }
 
 variable "cluster_autoscaler_config" {
-  description = "Cluster Autoscaler configuration parameters controlling scaling behavior of worker pools (scale-up/scale-down decisions, thresholds, and timing), only explicitly provided fields are applied, and unspecified fields use IKS defaults. [Learn more](https://cloud.ibm.com/docs/containers?topic=containers-cluster-scaling-install-addon-enable#ca-configmap)."
+  description = "Cluster Autoscaler configuration parameters controlling scaling behavior of worker pools (scale-up/scale-down decisions, thresholds, and timing), only explicitly provided fields are applied, and unspecified fields use IBM Cloud defaults. [Learn more](https://cloud.ibm.com/docs/containers?topic=containers-cluster-scaling-install-addon-enable#ca-configmap)."
 
   type = object({
     coresTotal                   = optional(string)
@@ -329,7 +329,7 @@ variable "force_delete_storage" {
 
 variable "cos_instance_crn" {
   type        = string
-  description = "crn of the COS instance to provision for OpenShift internal registry storage."
+  description = "CRN of the COS instance to provision for cluster internal registry storage. Required for OpenShift clusters."
   default     = null
 
   validation {
@@ -369,7 +369,7 @@ variable "access_tags" {
 
 variable "disable_outbound_traffic_protection" {
   type        = bool
-  description = "Whether to allow public outbound access from the cluster workers. This is applicable for OCP 4.15 and later. For iks set per your environment's security requirements."
+  description = "Whether to allow public outbound access from the cluster workers. For OpenShift clusters, this is applicable for version 4.15 and later. For Kubernetes clusters, set according to your environment's security requirements."
   default     = false
 }
 
@@ -616,7 +616,7 @@ variable "secrets_manager_secret_group_id" {
 
 variable "skip_secrets_manager_iam_auth_policy" {
   type        = bool
-  description = "To skip creating auth policy that allows OCP cluster 'Manager' role access in the existing Secrets Manager instance for managing ingress certificates."
+  description = "To skip creating auth policy that allows cluster 'Manager' role access in the existing Secrets Manager instance for managing ingress certificates."
   default     = false
 }
 

@@ -1,20 +1,27 @@
 # IBM Cloud Kubernetes / Red Hat OpenShift cluster on VPC infrastructure module
 
 [![Stable (With quality checks)](https://img.shields.io/badge/Status-Stable%20(With%20quality%20checks)-green)](https://terraform-ibm-modules.github.io/documentation/#/badge-status)
-[![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-module-template?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-module-template/releases/latest)
+[![latest release](https://img.shields.io/github/v/release/terraform-ibm-modules/terraform-ibm-base-cluster-vpc?logo=GitHub&sort=semver)](https://github.com/terraform-ibm-modules/terraform-ibm-base-cluster-vpc/releases/latest)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com/)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![Terraform Registry](https://img.shields.io/badge/terraform-registry-623CE4?logo=terraform)](https://registry.terraform.io/modules/terraform-ibm-modules/module-template/ibm/latest)
-<!--
-Add a description of modules in this repo.
-Expand on the repo short description in the .github/settings.yml file.
+[![Terraform Registry](https://img.shields.io/badge/terraform-registry-623CE4?logo=terraform)](https://registry.terraform.io/modules/terraform-ibm-modules/base-cluster-vpc/ibm/latest)
 
-For information, see "Module names and descriptions" at
-https://terraform-ibm-modules.github.io/documentation/#/implementation-guidelines?id=module-names-and-descriptions
--->
+Use this module to provision either [IBM Cloud Kubernetes Service (IKS)](https://cloud.ibm.com/docs/containers?topic=containers-getting-started) or [Red Hat OpenShift](https://cloud.ibm.com/docs/openshift?topic=openshift-getting-started) clusters on VPC Gen2 infrastructure. The module supports key management configuration for secret encryption and boot volume encryption, as well as advanced security group management for worker nodes, VPE, and load balancers.
 
-TODO: Replace this with a description of the modules in this repo.
+By default, the module automatically downloads required binaries ([jq](https://jqlang.github.io/jq) and [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)) if not detected in the terraform runtime. Disable this by setting `install_required_binaries` to `false`.
+
+### Helpful resources
+- [Understanding IBM Cloud Kubernetes Service](https://cloud.ibm.com/docs/containers?topic=containers-overview)
+- [Understanding Red Hat OpenShift on IBM Cloud](https://cloud.ibm.com/docs/openshift?topic=openshift-overview)
+- [Understanding secure by default Cluster VPC Networking](https://cloud.ibm.com/docs/containers?topic=containers-vpc-security-group-reference)
+- [Upgrading cluster versions using Terraform](https://github.com/terraform-ibm-modules/terraform-ibm-base-iks-vpc/blob/main/docs/kube-version-upgrade.md)
+- [Advanced security group configuration options](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc/blob/main/docs/advanced-security-group-rules.md)
+- [Setting up encryption for Block Storage for VPC](https://cloud.ibm.com/docs/containers?topic=containers-vpc-block#vpc-block-encryption)
+- [Setting up KMS encryption for File Storage for VPC](https://cloud.ibm.com/docs/containers?topic=containers-storage-file-vpc-apps#storage-file-kms)
+- [Getting started with custom service endpoints](https://registry.terraform.io/providers/IBM-Cloud/ibm/latest/docs/guides/custom-service-endpoints#getting-started-with-custom-service-endpoints)
+- [Setting up cluster secret encryption](https://cloud.ibm.com/docs/containers?topic=containers-encryption-secrets&interface=ui)
+- [Setting up worker node disk encryption for VPC clusters](https://cloud.ibm.com/docs/openshift?topic=openshift-encryption-vpc-worker-disks)
 
 
 <!-- The following content is automatically populated by the pre-commit hook -->
@@ -47,16 +54,11 @@ TODO: Replace this with a description of the modules in this repo.
 
 
 <!-- Replace this heading with the name of the root level module (the repo name) -->
-## terraform-ibm-module-template
+## terraform-ibm-base-cluster-vpc
 
 ### Usage
 
-<!--
-Add an example of the use of the module in the following code block.
-
-Use real values instead of "var.<var_name>" or other placeholder values
-unless real values don't help users know what to change.
--->
+#### Kubernetes Cluster Example
 
 ```hcl
 terraform {
@@ -78,45 +80,119 @@ provider "ibm" {
   region           = local.region
 }
 
-module "module_template" {
-  source            = "terraform-ibm-modules/<replace>/ibm"
-  version           = "X.Y.Z" # Replace "X.Y.Z" with a release version to lock into a specific release
-  region            = local.region
-  name              = "instance-name"
-  resource_group_id = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX" # Replace with the actual ID of resource group to use
+module "iks_cluster" {
+  source               = "terraform-ibm-modules/base-cluster-vpc/ibm"
+  version              = "X.Y.Z" # Replace "X.Y.Z" with a release version to lock into a specific release
+  cluster_type         = "kubernetes"
+  cluster_name         = "my-iks-cluster"
+  resource_group_id    = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX"
+  region               = local.region
+  force_delete_storage = true
+  vpc_id               = "79cxxxx-xxxx-xxxx-xxxx-xxxxxXX8667"
+  # obtain the below values from the targeted VPC and adjust to the number of zones, subnets, subnet name, cidr_block, id, zone
+  vpc_subnets          = {
+    zone-1    = [
+        {
+            cidr_block = "192.168.32.0/22"
+            id         = "0717-afc29fbb-0dbe-493a-a5b9-f3c5899cb8b9"
+            zone       = "us-south-1"
+        },
+        {
+            cidr_block = "192.168.36.0/22"
+            id         = "0727-d65c1eda-9e38-4200-8452-cb8ff5bb3140"
+            zone       = "us-south-2"
+        },
+        {
+            cidr_block = "192.168.40.0/22"
+            id         = "0737-9a823cd3-16bf-4ba4-a429-9e1fc7db74b8"
+            zone       = "us-south-3"
+        }
+    ]
+  }
+  worker_pools         = [
+    {
+      subnet_prefix    = "zone-1"
+      pool_name        = "default"
+      machine_type     = "bx2.4x16"
+      workers_per_zone = 2
+      operating_system = "UBUNTU_24_64"
+    }
+  ]
 }
 ```
 
-### Required access policies
+#### OpenShift Cluster Example
 
-<!-- PERMISSIONS REQUIRED TO RUN MODULE
-If this module requires permissions, uncomment the following block and update
-the sample permissions, following the format.
-Replace the 'Sample IBM Cloud' service and roles with applicable values.
-The required information can usually be found in the services official
-IBM Cloud documentation.
-To view all available service permissions, you can go in the
-console at Manage > Access (IAM) > Access groups and click into an existing group
-(or create a new one) and in the 'Access' tab click 'Assign access'.
--->
+```hcl
+module "ocp_cluster" {
+  source               = "terraform-ibm-modules/base-cluster-vpc/ibm"
+  version              = "X.Y.Z" # Replace "X.Y.Z" with a release version to lock into a specific release
+  cluster_type         = "openshift"
+  cluster_name         = "my-ocp-cluster"
+  resource_group_id    = "xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX"
+  region               = "us-south"
+  force_delete_storage = true
+  vpc_id               = "79cxxxx-xxxx-xxxx-xxxx-xxxxxXX8667"
+  cos_instance_crn     = "crn:v1:bluemix:public:cloud-object-storage:global:a/xxXXxxXXxXxXXXXxxXxxxXXXXxXXXXX:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx::"
+  # obtain the below values from the targeted VPC and adjust to the number of zones, subnets, subnet name, cidr_block, id, zone
+  vpc_subnets          = {
+    zone-1    = [
+        {
+            cidr_block = "192.168.32.0/22"
+            id         = "0717-afc29fbb-0dbe-493a-a5b9-f3c5899cb8b9"
+            zone       = "us-south-1"
+        },
+        {
+            cidr_block = "192.168.36.0/22"
+            id         = "0727-d65c1eda-9e38-4200-8452-cb8ff5bb3140"
+            zone       = "us-south-2"
+        },
+        {
+            cidr_block = "192.168.40.0/22"
+            id         = "0737-9a823cd3-16bf-4ba4-a429-9e1fc7db74b8"
+            zone       = "us-south-3"
+        }
+    ]
+  }
+  worker_pools         = [
+    {
+      subnet_prefix    = "zone-1"
+      pool_name        = "default"
+      machine_type     = "bx2.4x16"
+      workers_per_zone = 2
+      operating_system = "REDHAT_8_64"
+    }
+  ]
+}
+```
 
-<!--
-You need the following permissions to run this module:
+### Required IAM access policies
 
-- Service
-    - **Resource group only**
-        - `Viewer` access on the specific resource group
-    - **Sample IBM Cloud** service
-        - `Editor` platform access
-        - `Manager` service access
--->
+You need the following permissions to run this module.
 
-<!-- NO PERMISSIONS FOR MODULE
-If no permissions are required for the module, uncomment the following
-statement instead the previous block.
--->
+- Account Management
+  - **All Identity and Access Enabled** service
+    - `Viewer` platform access
+  - **All Resource Groups** service
+    - `Viewer` platform access
+- IAM Services
+  - **Cloud Object Storage** service (required for OpenShift clusters)
+    - `Editor` platform access
+    - `Manager` service access
+  - **Kubernetes** service
+    - `Administrator` platform access
+    - `Manager` service access
+  - **VPC Infrastructure** service
+    - `Administrator` platform access
+    - `Manager` service access
+  - **IAM Identity Service** service
+    - `User API key creator` service access
 
-<!-- No permissions are needed to run this module.-->
+Optionally, you need the following permissions to attach Access Management tags to resources in this module.
+
+- IAM Services
+  - **Tagging** service
+    - `Administrator` platform access
 
 
 <!-- The following content is automatically populated by the pre-commit hook -->
@@ -174,10 +250,10 @@ statement instead the previous block.
 | <a name="input_additional_lb_security_group_ids"></a> [additional\_lb\_security\_group\_ids](#input\_additional\_lb\_security\_group\_ids) | Additional security groups to add to the load balancers associated with the cluster. Ensure that the `number_of_lbs` is set to the number of LBs associated with the cluster. This comes in addition to the IBM maintained security group. | `list(string)` | `[]` | no |
 | <a name="input_additional_vpe_security_group_ids"></a> [additional\_vpe\_security\_group\_ids](#input\_additional\_vpe\_security\_group\_ids) | Additional security groups to add to all existing load balancers. This comes in addition to the IBM maintained security group. | <pre>object({<br/>    master   = optional(list(string), [])<br/>    registry = optional(list(string), [])<br/>    api      = optional(list(string), [])<br/>  })</pre> | `{}` | no |
 | <a name="input_addons"></a> [addons](#input\_addons) | Map of cluster add-on versions to install. | <pre>object({<br/>    # Common<br/>    vpc-file-csi-driver = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    static-route = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    cluster-autoscaler = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    vpc-block-csi-driver = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    ibm-storage-operator = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/><br/>    # OCP only<br/>    debug-tool = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    image-key-synchronizer = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    openshift-data-foundation = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    openshift-ai = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/><br/>    # iks only<br/>    diagnostics-and-debug-tool = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>    alb-oauth-proxy = optional(object({<br/>      version         = optional(string)<br/>      parameters_json = optional(string)<br/>    }))<br/>  })</pre> | `{}` | no |
-| <a name="input_allow_default_worker_pool_replacement"></a> [allow\_default\_worker\_pool\_replacement](#input\_allow\_default\_worker\_pool\_replacement) | (Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool follow these [steps](https://github.com/terraform-ibm-modules/terraform-ibm-base-ocp-vpc?tab=readme-ov-file#important-considerations-for-terraform-and-default-worker-pool). | `bool` | `false` | no |
+| <a name="input_allow_default_worker_pool_replacement"></a> [allow\_default\_worker\_pool\_replacement](#input\_allow\_default\_worker\_pool\_replacement) | (Advanced users) Set to true to allow the module to recreate a default worker pool. If you wish to make any change to the default worker pool which requires the re-creation of the default pool, refer to the module documentation for important considerations. | `bool` | `false` | no |
 | <a name="input_attach_ibm_managed_security_group"></a> [attach\_ibm\_managed\_security\_group](#input\_attach\_ibm\_managed\_security\_group) | Specify whether to attach the IBM-defined default security group (whose name is kube-<clusterid>) to all worker nodes. Only applicable if `custom_security_group_ids` is set. | `bool` | `true` | no |
 | <a name="input_cbr_rules"></a> [cbr\_rules](#input\_cbr\_rules) | The context-based restrictions rule to create. Reduce the attack surface with context-based restrictions. Only one rule is allowed. [Learn more](https://cloud.ibm.com/docs/iam?topic=iam-context-restrictions-whatis) | <pre>list(object({<br/>    description = string<br/>    account_id  = string<br/>    rule_contexts = list(object({<br/>      attributes = optional(list(object({<br/>        name  = string<br/>        value = string<br/>    }))) }))<br/>    enforcement_mode = string<br/>    tags = optional(list(object({<br/>      name  = string<br/>      value = string<br/>    })), [])<br/>    operations = optional(list(object({<br/>      api_types = list(object({<br/>        api_type_id = string<br/>      }))<br/>    })))<br/>  }))</pre> | `[]` | no |
-| <a name="input_cluster_autoscaler_config"></a> [cluster\_autoscaler\_config](#input\_cluster\_autoscaler\_config) | Cluster Autoscaler configuration parameters controlling scaling behavior of worker pools (scale-up/scale-down decisions, thresholds, and timing), only explicitly provided fields are applied, and unspecified fields use IKS defaults. [Learn more](https://cloud.ibm.com/docs/containers?topic=containers-cluster-scaling-install-addon-enable#ca-configmap). | <pre>object({<br/>    coresTotal                   = optional(string)<br/>    expander                     = optional(string)<br/>    expendablePodsPriorityCutoff = optional(number)<br/>    ignoreDaemonsetsUtilization  = optional(bool)<br/>    imagePullPolicy              = optional(string)<br/><br/>    livenessProbeFailureThreshold = optional(number)<br/>    livenessProbePeriodSeconds    = optional(number)<br/>    livenessProbeTimeoutSeconds   = optional(number)<br/><br/>    logLevel = optional(string)<br/><br/>    maxBulkSoftTaintCount     = optional(number)<br/>    maxBulkSoftTaintTime      = optional(string)<br/>    maxFailingTime            = optional(string)<br/>    maxGracefulTerminationSec = optional(number)<br/>    maxInactivity             = optional(string)<br/>    maxNodeProvisionTime      = optional(string)<br/>    maxRetryGap               = optional(number)<br/>    maxTotalUnreadyPercentage = optional(number)<br/><br/>    memoryTotal         = optional(string)<br/>    minReplicaCount     = optional(number)<br/>    newPodScaleUpDelay  = optional(string)<br/>    okTotalUnreadyCount = optional(number)<br/><br/>    resourcesLimitsCPU      = optional(string)<br/>    resourcesLimitsMemory   = optional(string)<br/>    resourcesRequestsCPU    = optional(string)<br/>    resourcesRequestsMemory = optional(string)<br/><br/>    retryAttempts = optional(number)<br/><br/>    scaleDownCandidatesPoolMinCount  = optional(number)<br/>    scaleDownCandidatesPoolRatio     = optional(number)<br/>    scaleDownDelayAfterAdd           = optional(string)<br/>    scaleDownDelayAfterDelete        = optional(string)<br/>    scaleDownDelayAfterFailure       = optional(string)<br/>    scaleDownEnabled                 = optional(bool)<br/>    scaleDownGPUUtilizationThreshold = optional(number)<br/>    scaleDownNonEmptyCandidatesCount = optional(number)<br/>    scaleDownUnneededTime            = optional(string)<br/>    scaleDownUnreadyTime             = optional(string)<br/>    scaleDownUtilizationThreshold    = optional(number)<br/><br/>    scanInterval = optional(string)<br/><br/>    skipNodesWithLocalStorage = optional(bool)<br/>    skipNodesWithSystemPods   = optional(bool)<br/><br/>    unremovableNodeRecheckTimeout = optional(string)<br/><br/>    # extended fields<br/>    maxNodeGroupBinpackingDuration = optional(string)<br/>    maxNodesPerScaleUp             = optional(number)<br/>    parallelDrain                  = optional(bool)<br/>    maxScaleDownParallelism        = optional(number)<br/>    maxDrainParallelism            = optional(number)<br/>    nodeDeletionBatcherInterval    = optional(string)<br/>    nodeDeleteDelayAfterTaint      = optional(string)<br/>    enforceNodeGroupMinSize        = optional(bool)<br/>    kubeClientBurst                = optional(number)<br/>    kubeClientQPS                  = optional(number)<br/>    scaleDownUnreadyEnabled        = optional(bool)<br/>    maxPodEvictionTime             = optional(string)<br/>    balancingIgnoreLabel           = optional(string)<br/>    OSReservedMemoryGi             = optional(number)<br/>    OSReservedCPUMili              = optional(number)<br/>  })</pre> | `{}` | no |
+| <a name="input_cluster_autoscaler_config"></a> [cluster\_autoscaler\_config](#input\_cluster\_autoscaler\_config) | Cluster Autoscaler configuration parameters controlling scaling behavior of worker pools (scale-up/scale-down decisions, thresholds, and timing), only explicitly provided fields are applied, and unspecified fields use IBM Cloud defaults. [Learn more](https://cloud.ibm.com/docs/containers?topic=containers-cluster-scaling-install-addon-enable#ca-configmap). | <pre>object({<br/>    coresTotal                   = optional(string)<br/>    expander                     = optional(string)<br/>    expendablePodsPriorityCutoff = optional(number)<br/>    ignoreDaemonsetsUtilization  = optional(bool)<br/>    imagePullPolicy              = optional(string)<br/><br/>    livenessProbeFailureThreshold = optional(number)<br/>    livenessProbePeriodSeconds    = optional(number)<br/>    livenessProbeTimeoutSeconds   = optional(number)<br/><br/>    logLevel = optional(string)<br/><br/>    maxBulkSoftTaintCount     = optional(number)<br/>    maxBulkSoftTaintTime      = optional(string)<br/>    maxFailingTime            = optional(string)<br/>    maxGracefulTerminationSec = optional(number)<br/>    maxInactivity             = optional(string)<br/>    maxNodeProvisionTime      = optional(string)<br/>    maxRetryGap               = optional(number)<br/>    maxTotalUnreadyPercentage = optional(number)<br/><br/>    memoryTotal         = optional(string)<br/>    minReplicaCount     = optional(number)<br/>    newPodScaleUpDelay  = optional(string)<br/>    okTotalUnreadyCount = optional(number)<br/><br/>    resourcesLimitsCPU      = optional(string)<br/>    resourcesLimitsMemory   = optional(string)<br/>    resourcesRequestsCPU    = optional(string)<br/>    resourcesRequestsMemory = optional(string)<br/><br/>    retryAttempts = optional(number)<br/><br/>    scaleDownCandidatesPoolMinCount  = optional(number)<br/>    scaleDownCandidatesPoolRatio     = optional(number)<br/>    scaleDownDelayAfterAdd           = optional(string)<br/>    scaleDownDelayAfterDelete        = optional(string)<br/>    scaleDownDelayAfterFailure       = optional(string)<br/>    scaleDownEnabled                 = optional(bool)<br/>    scaleDownGPUUtilizationThreshold = optional(number)<br/>    scaleDownNonEmptyCandidatesCount = optional(number)<br/>    scaleDownUnneededTime            = optional(string)<br/>    scaleDownUnreadyTime             = optional(string)<br/>    scaleDownUtilizationThreshold    = optional(number)<br/><br/>    scanInterval = optional(string)<br/><br/>    skipNodesWithLocalStorage = optional(bool)<br/>    skipNodesWithSystemPods   = optional(bool)<br/><br/>    unremovableNodeRecheckTimeout = optional(string)<br/><br/>    # extended fields<br/>    maxNodeGroupBinpackingDuration = optional(string)<br/>    maxNodesPerScaleUp             = optional(number)<br/>    parallelDrain                  = optional(bool)<br/>    maxScaleDownParallelism        = optional(number)<br/>    maxDrainParallelism            = optional(number)<br/>    nodeDeletionBatcherInterval    = optional(string)<br/>    nodeDeleteDelayAfterTaint      = optional(string)<br/>    enforceNodeGroupMinSize        = optional(bool)<br/>    kubeClientBurst                = optional(number)<br/>    kubeClientQPS                  = optional(number)<br/>    scaleDownUnreadyEnabled        = optional(bool)<br/>    maxPodEvictionTime             = optional(string)<br/>    balancingIgnoreLabel           = optional(string)<br/>    OSReservedMemoryGi             = optional(number)<br/>    OSReservedCPUMili              = optional(number)<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_config_endpoint_type"></a> [cluster\_config\_endpoint\_type](#input\_cluster\_config\_endpoint\_type) | Specify which type of endpoint to use for cluster config access: 'default', 'private', 'vpe', 'link'. A 'default' value uses the default endpoint of the cluster. | `string` | `"default"` | no |
 | <a name="input_cluster_create_timeout"></a> [cluster\_create\_timeout](#input\_cluster\_create\_timeout) | Timeout duration for cluster creation operations. Specify a duration string (e.g., '3h', '45m'). | `string` | `"3h"` | no |
 | <a name="input_cluster_delete_timeout"></a> [cluster\_delete\_timeout](#input\_cluster\_delete\_timeout) | Timeout duration for cluster deletion operations. Specify a duration string (e.g., '2h', '30m'). | `string` | `"2h"` | no |
@@ -186,9 +262,9 @@ statement instead the previous block.
 | <a name="input_cluster_type"></a> [cluster\_type](#input\_cluster\_type) | The type of cluster to provision. | `string` | `"kubernetes"` | no |
 | <a name="input_cluster_update_timeout"></a> [cluster\_update\_timeout](#input\_cluster\_update\_timeout) | Timeout duration for cluster update operations. Specify a duration string (e.g., '3h', '1h30m'). | `string` | `"3h"` | no |
 | <a name="input_cluster_version"></a> [cluster\_version](#input\_cluster\_version) | The version of the cluster to provision.<br/><br/>  For Kubernetes clusters, specify a Kubernetes version (for example, 1.33).<br/>  For OpenShift clusters, specify an OpenShift version (for example, 4.19).<br/><br/>  If no value is specified, or if set to "default", the current default version<br/>  for the selected cluster type is used.<br/><br/>  This input is used only during initial cluster provisioning and is ignored for updates. | `string` | `null` | no |
-| <a name="input_cos_instance_crn"></a> [cos\_instance\_crn](#input\_cos\_instance\_crn) | crn of the COS instance to provision for OpenShift internal registry storage. | `string` | `null` | no |
+| <a name="input_cos_instance_crn"></a> [cos\_instance\_crn](#input\_cos\_instance\_crn) | CRN of the COS instance to provision for cluster internal registry storage. Required for OpenShift clusters. | `string` | `null` | no |
 | <a name="input_custom_security_group_ids"></a> [custom\_security\_group\_ids](#input\_custom\_security\_group\_ids) | Security groups to add to all worker nodes. This comes in addition to the IBM maintained security group if `attach_ibm_managed_security_group` is set to true. If this variable is set, the default VPC security group is NOT assigned to the worker nodes. | `list(string)` | `null` | no |
-| <a name="input_disable_outbound_traffic_protection"></a> [disable\_outbound\_traffic\_protection](#input\_disable\_outbound\_traffic\_protection) | Whether to allow public outbound access from the cluster workers. This is applicable for OCP 4.15 and later. For iks set per your environment's security requirements. | `bool` | `false` | no |
+| <a name="input_disable_outbound_traffic_protection"></a> [disable\_outbound\_traffic\_protection](#input\_disable\_outbound\_traffic\_protection) | Whether to allow public outbound access from the cluster workers. For OpenShift clusters, this is applicable for version 4.15 and later. For Kubernetes clusters, set according to your environment's security requirements. | `bool` | `false` | no |
 | <a name="input_disable_public_endpoint"></a> [disable\_public\_endpoint](#input\_disable\_public\_endpoint) | Whether access to the public service endpoint is disabled when the cluster is created. Does not affect existing clusters. You can't disable a public endpoint on an existing cluster, so you can't convert a public cluster to a private cluster. To change a public endpoint to private, create another cluster with this input set to `true`. | `bool` | `false` | no |
 | <a name="input_enable_cluster_version_upgrade"></a> [enable\_cluster\_version\_upgrade](#input\_enable\_cluster\_version\_upgrade) | When set to true, allows Terraform to manage major cluster version upgrades. This is intended for advanced users who manually control major version upgrades. Defaults to false to avoid unintended drift from IBM-managed patch updates. NOTE: Enabling this on existing clusters requires a one-time terraform state migration. | `bool` | `false` | no |
 | <a name="input_enable_ocp_console"></a> [enable\_ocp\_console](#input\_enable\_ocp\_console) | Flag to specify whether to enable or disable the OpenShift console. If set to `null` the module does not modify the current setting on the cluster. Keep in mind that when this input is set to `true` or `false` on a cluster with private only endpoint enabled, the runtime must be able to access the private endpoint. | `bool` | `null` | no |
@@ -208,7 +284,7 @@ statement instead the previous block.
 | <a name="input_resource_group_id"></a> [resource\_group\_id](#input\_resource\_group\_id) | The ID of an existing IBM Cloud resource group where the cluster is grouped. | `string` | n/a | yes |
 | <a name="input_secrets_manager_secret_group_id"></a> [secrets\_manager\_secret\_group\_id](#input\_secrets\_manager\_secret\_group\_id) | Secret group ID where Ingress secrets are stored in the Secrets Manager instance. | `string` | `null` | no |
 | <a name="input_service_subnet_cidr"></a> [service\_subnet\_cidr](#input\_service\_subnet\_cidr) | Specify a custom subnet CIDR to provide private IP addresses for services. The subnet must be at least `/24` or larger. Default value is `172.21.0.0/16` when the variable is set to `null`. | `string` | `null` | no |
-| <a name="input_skip_secrets_manager_iam_auth_policy"></a> [skip\_secrets\_manager\_iam\_auth\_policy](#input\_skip\_secrets\_manager\_iam\_auth\_policy) | To skip creating auth policy that allows OCP cluster 'Manager' role access in the existing Secrets Manager instance for managing ingress certificates. | `bool` | `false` | no |
+| <a name="input_skip_secrets_manager_iam_auth_policy"></a> [skip\_secrets\_manager\_iam\_auth\_policy](#input\_skip\_secrets\_manager\_iam\_auth\_policy) | To skip creating auth policy that allows cluster 'Manager' role access in the existing Secrets Manager instance for managing ingress certificates. | `bool` | `false` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Metadata labels describing this cluster deployment, i.e. test | `list(string)` | `[]` | no |
 | <a name="input_verify_worker_network_readiness"></a> [verify\_worker\_network\_readiness](#input\_verify\_worker\_network\_readiness) | By setting this to true, a script runs kubectl commands to verify that all worker nodes can communicate successfully with the master. If the runtime does not have access to the kube cluster to run kubectl commands, set this value to false. | `bool` | `true` | no |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC instance where this cluster is provisioned. | `string` | n/a | yes |
@@ -246,8 +322,10 @@ statement instead the previous block.
 
 ## Known issues
 
-<!-- Update this if any known issues or limitations -->
-There are currently no known issues or limitations at this time.
+For a list of common known issues, see:
+- [Known issues with IBM Cloud Kubernetes Service when using Terraform](https://cloud.ibm.com/docs/ibm-cloud-provider-for-terraform?topic=ibm-cloud-provider-for-terraform-known-issues)
+- [Known issues with Red Hat OpenShift on IBM Cloud when using Terraform](https://cloud.ibm.com/docs/ibm-cloud-provider-for-terraform?topic=ibm-cloud-provider-for-terraform-known-issues)
+
 
 <!-- Leave this section as is so that your module has a link to local development environment set-up steps for contributors to follow -->
 ## Contributing

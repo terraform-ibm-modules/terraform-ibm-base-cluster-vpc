@@ -51,3 +51,9 @@ variable "ocp_entitlement" {
   description = "Value that is applied to the entitlements for OCP cluster provisioning"
   default     = null
 }
+
+variable "cos_instance_crn" {
+  type        = string
+  description = "CRN of the COS instance to use for OpenShift cluster internal registry storage"
+  default     = null
+}
