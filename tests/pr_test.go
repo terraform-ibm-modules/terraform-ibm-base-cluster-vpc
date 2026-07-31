@@ -42,6 +42,11 @@ func setupOptions(t *testing.T, prefix string, dir string) *testhelper.TestOptio
 		TerraformDir:  dir,
 		Prefix:        prefix,
 		ResourceGroup: resourceGroup,
+		Region:        "us-south",
+		TerraformVars: map[string]interface{}{
+			"prefix": prefix,
+			"region": "us-south",
+		},
 	})
 	return options
 }
@@ -51,9 +56,7 @@ func TestRunOCPExample(t *testing.T) {
 
 	prefix := fmt.Sprintf("ocp-%s", strings.ToLower(random.UniqueID()))
 	options := setupOptions(t, prefix, openshiftExampleDir)
-	options.TerraformVars = map[string]interface{}{
-		"cos_instance_crn": permanentResources["general_test_storage_cos_instance_crn"],
-	}
+	options.TerraformVars["cos_instance_crn"] = permanentResources["general_test_storage_cos_instance_crn"]
 
 	output, err := options.RunTestConsistency()
 	assert.Nil(t, err, "This should not have errored")
@@ -76,9 +79,7 @@ func TestRunUpgradeOCPExample(t *testing.T) {
 
 	prefix := fmt.Sprintf("ocp-upg-%s", strings.ToLower(random.UniqueID()))
 	options := setupOptions(t, prefix, openshiftExampleDir)
-	options.TerraformVars = map[string]interface{}{
-		"cos_instance_crn": permanentResources["general_test_storage_cos_instance_crn"],
-	}
+	options.TerraformVars["cos_instance_crn"] = permanentResources["general_test_storage_cos_instance_crn"]
 	output, err := options.RunTestUpgrade()
 	if !options.UpgradeTestSkipped {
 		assert.Nil(t, err, "This should not have errored")
